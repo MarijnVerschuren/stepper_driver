@@ -2179,7 +2179,7 @@
 				)
 			)
 		)
-		(property "Value" " TDK ACM2012-900"
+		(property "Value" "TDK ACM2012-900"
 			(at 80.01 43.942 0)
 			(effects
 				(font
@@ -2187,7 +2187,7 @@
 				)
 			)
 		)
-		(property "Footprint" "ACM2012_900_2P_T002:ACM2012_TDK"
+		(property "Footprint" "Marijn_KiCad:ACM2012_TDK_UPDATE"
 			(at 80.01 45.72 0)
 			(effects
 				(font
@@ -2205,7 +2205,7 @@
 				(hide yes)
 			)
 		)
-		(property "Description" " TDK ACM2012-900-2P-T002 "
+		(property "Description" "TDK ACM2012-900-2P-T002"
 			(at 80.01 39.37 0)
 			(effects
 				(font
