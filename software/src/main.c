@@ -79,6 +79,9 @@ void EXTI1_handler(void) {
 void ADC_handler(void) {
 	uint8_t status = ADC1->SR;
 	ADC1->SR = ~status;
+	if (status & 0b000001) {
+		return;  // watchdog
+	}
 	if (status & 0b000100) {
 		uint32_t a = ADC1->JDR1;
 		angle = a + (a / 4);
