@@ -65,7 +65,6 @@
 
 volatile uint16_t angle = 0;
 
-
 void EXTI0_handler(void) {
 	EXTI->PR = 0x00000001UL;
 	return;
@@ -137,6 +136,7 @@ void main(void) {
 	// TIM
 	config_TIM_master(TIM1, 10000, 100, TIM_TRGO_UPDATE);										// 100 Hz
 	start_TIM_update_irq(TIM1);
+	config_TIM(TIM2, 50, 0xFFFFFFFF);
 	// TODO: is it possible to combine PWM and UPDATE triggers to make sure move and read are not done psudo-simultanuisly
 
 	// USART
@@ -160,8 +160,9 @@ void main(void) {
 	start_TIM(TIM1);									// start ADC polling timer
 	GPIO_write(TMC_NEN_PORT, TMC_NEN_PIN, 0);			// enable TMC chip
 
+	volatile uint32_t delay = 1;
 	while (1) {
 		GPIO_toggle(TMC_STEP_PORT, TMC_STEP_PIN);
-		delay_ms(1);
+		delay_ms(delay);
 	}
 }
