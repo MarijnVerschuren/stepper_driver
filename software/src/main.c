@@ -64,6 +64,8 @@
 
 
 volatile uint16_t angle = 0;
+volatile uint16_t target = 2000;
+volatile uint32_t delay = 0;  // min 75 (us)
 
 void EXTI0_handler(void) {
 	EXTI->PR = 0x00000001UL;
@@ -90,7 +92,18 @@ void ADC_handler(void) {
 
 void TIM1_update_handler(void) {
 	TIM1->SR &= ~0x00000001UL;
-	GPIO_toggle(STATUS_LED_PORT, STATUS_LED_PIN);
+	int16_t delta = target - angle;
+	int16_t delta1 = (target + 4096) - angle;
+	uint16_t abs = delta * (delta < 0 ? -1 : 1);
+	uint16_t abs1 = delta1 * (delta1 < 0 ? -1 : 1);
+	delta = abs1 < abs ? delta1 : delta;
+	abs = abs1 < abs ? abs1 : abs;
+
+	GPIO_write(TMC_DIR_PORT, TMC_DIR_PIN, delta < 0);
+	GPIO_write(STATUS_LED_PORT, STATUS_LED_PIN, delta < 0);
+
+	delay = (uint32_t)(75.0f / (abs / 2048.0f));
+	if (abs < 20) { delay = 0; }
 	return;
 }
 
@@ -134,9 +147,9 @@ void main(void) {
 	config_ADC_GPIO_inj_channel(AS5600_OUT_PORT, AS5600_OUT_PIN, ADC_SAMPLE_28_CYCLES, 409, 0);	// AS5600 out
 
 	// TIM
-	config_TIM_master(TIM1, 10000, 100, TIM_TRGO_UPDATE);										// 100 Hz
+	config_TIM_master(TIM1, 1000, 100, TIM_TRGO_UPDATE);										// 100 Hz
 	start_TIM_update_irq(TIM1);
-	config_TIM(TIM2, 50, 0xFFFFFFFF);
+	config_TIM(TIM2, 50, 0xFFFFFFFF);															// 1MHz us delay timer
 	// TODO: is it possible to combine PWM and UPDATE triggers to make sure move and read are not done psudo-simultanuisly
 
 	// USART
@@ -154,15 +167,16 @@ void main(void) {
 		I2C2, AS5600_POW_NOM | AS5600_HYST_2LSB | AS5600_MODE_REDUCED_ANALOG |
 		AS5600_SFILTER_2 | AS5600_FFILTER_10LSB | AS5600_WDG_ON, 10
 	)) { delay_ms(10); }
-	//volatile uint8_t stat = AS5600_get_status(I2C2, 10);
+	volatile uint8_t stat = AS5600_get_status(I2C2, 10);
 
 	start_ADC(0, 1);									// start ADC injected channels
 	start_TIM(TIM1);									// start ADC polling timer
+	start_TIM(TIM2);									// start delay timer
 	GPIO_write(TMC_NEN_PORT, TMC_NEN_PIN, 0);			// enable TMC chip
 
-	volatile uint32_t delay = 1;
 	while (1) {
+		if (!delay) { __asm volatile ("wfe"); continue; }
 		GPIO_toggle(TMC_STEP_PORT, TMC_STEP_PIN);
-		delay_ms(delay);
+		delay_TIM(TIM2, delay);
 	}
 }
