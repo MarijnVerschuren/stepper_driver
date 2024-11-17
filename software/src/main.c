@@ -7,6 +7,7 @@
 #include "I2C.h"
 #include "ADC.h"
 #include "tim.h"
+#include "SPI.h"
 
 #include "AS5600/AS5600.h"
 
@@ -22,10 +23,12 @@
 #define TMC_MS2_PIN				2				/* GPIO		O	*/
 #define TMC_NEN_PORT			GPIOA			/* TMC NEN		*/
 #define TMC_NEN_PIN				3				/* GPIO		O	*/
-#define CTRL_SPI_NCS_DEV_PIN	0				/* SPI		I		TODO */
-#define CTRL_SPI_CLK_DEV_PIN	0				/* SPI		I		TODO */
-#define CTRL_SPI_MISO_DEV_PIN	0				/* SPI		O		TODO */
-#define CTRL_SPI_MOSI_DEV_PIN	0				/* SPI		I		TODO */
+#define CTRL_SPI_NSS_PORT		GPIOA			/* CTRL SPI NSS */
+#define CTRL_SPI_NSS_PIN		4				/* GPIO		I	*/
+#define CTRL_SPI_NCS_DEV_PIN	SPI1_NSS_A4		/* SPI		I	*/
+#define CTRL_SPI_CLK_DEV_PIN	SPI1_SCK_A5		/* SPI		I	*/
+#define CTRL_SPI_MISO_DEV_PIN	SPI1_MISO_A6	/* SPI		O	*/
+#define CTRL_SPI_MOSI_DEV_PIN	SPI1_MOSI_A7	/* SPI		I	*/
 #define STATUS_LED_PORT			GPIOA			/* status LED	*/
 #define STATUS_LED_PIN			8				/* GPIO		O	*/
 #define TMC_UART_TX_DEV_PIN		USART1_TX_A9	/* USART	O	*/
@@ -38,13 +41,15 @@
 #define TMC_DIAG_PIN			0				/* EXTI		I	*/
 #define TMC_INDEX_PORT			GPIOB			/* TMC index	*/
 #define TMC_INDEX_PIN			1				/* EXTI		I	*/
-#define FLASH_SPI_CLK_DEV_PIN	0				/* SPI		O		TODO */
-#define FLASH_SPI_MISO_DEV_PIN	0				/* SPI		I		TODO */
-#define FLASH_SPI_MOSI_DEV_PIN	0				/* SPI		O		TODO */
+#define FLASH_SPI_CLK_DEV_PIN	SPI3_SCK_B3		/* SPI		O	*/
+#define FLASH_SPI_MISO_DEV_PIN	SPI3_MISO_B4	/* SPI		I	*/
+#define FLASH_SPI_MOSI_DEV_PIN	SPI3_MOSI_B5	/* SPI		O	*/
 #define FLASH_NWP_PORT			GPIOB			/* flash NWP	*/
 #define FLASH_NWP_PIN			6				/* GPIO		O	*/
 #define FLASH_NRST_PORT			GPIOB			/* flash NWP	*/
 #define FLASH_NRST_PIN			7				/* GPIO		O	*/
+#define FLASH_NSS_PORT			GPIOA			/* flash NSS	*/
+#define FLASH_NSS_PIN			15				/* GPIO		O	*/
 #define AS5600_I2C_SDA_DEV_PIN	I2C2_B9_SDA		/* I2C		IO	*/
 #define AS5600_I2C_SCL_DEV_PIN	I2C2_B10_SCL	/* I2C		O	*/
 #define TMC_STEP_PORT			GPIOB			/* TMC step		*/
@@ -124,6 +129,8 @@ void main(void) {
 	config_GPIO(STATUS_LED_PORT, STATUS_LED_PIN, GPIO_output | GPIO_no_pull | GPIO_push_pull);	// status LED
 	config_GPIO(FLASH_NWP_PORT, FLASH_NWP_PIN, GPIO_output | GPIO_no_pull | GPIO_push_pull);	// FLASH_NWP
 	config_GPIO(FLASH_NRST_PORT, FLASH_NRST_PIN, GPIO_output | GPIO_no_pull | GPIO_push_pull);	// FLASH_NRST
+	config_GPIO(FLASH_NSS_PORT, FLASH_NSS_PIN, GPIO_output | GPIO_pull_up | GPIO_open_drain);	// FLASH_NSS
+	config_GPIO(CTRL_SPI_NSS_PORT, CTRL_SPI_NSS_PIN, GPIO_input | GPIO_pull_up);				// CTRL_NSS
 	config_GPIO(TMC_STEP_PORT, TMC_STEP_PIN, GPIO_output | GPIO_no_pull | GPIO_push_pull);		// TMC_STEP
 	config_GPIO(TMC_DIR_PORT, TMC_DIR_PIN, GPIO_output | GPIO_no_pull | GPIO_push_pull);		// TMC_DIR
 	config_GPIO(TMC_SPREAD_PORT, TMC_SPREAD_PIN, GPIO_output | GPIO_no_pull | GPIO_push_pull);	// TMC_SPREAD
@@ -132,6 +139,7 @@ void main(void) {
 	GPIO_write(TMC_MS1_PORT, TMC_MS1_PIN, 0);			// set MS1 setting for 1/8
 	GPIO_write(TMC_MS2_PORT, TMC_MS2_PIN, 0);			// set MS2 setting for 1/8
 	GPIO_write(STATUS_LED_PORT, STATUS_LED_PIN, 1);		// status LED off
+	GPIO_write(FLASH_NSS_PORT, FLASH_NSS_PIN, 1);		// deselect flash chip
 
 	// EXTI
 	config_EXTI_GPIO(TMC_DIAG_PORT, TMC_DIAG_PIN, 1, 0);										// TMC_DIAG
@@ -158,11 +166,21 @@ void main(void) {
 	// I2C
 	config_I2C(AS5600_I2C_SCL_DEV_PIN, AS5600_I2C_SDA_DEV_PIN, 0x00);							// AS5600_I2C
 
-	// TODO: SPI (flash)
-	// TODO: SPI (slave)
-	// TODO: USB
+	// SPI
+	fconfig_SPI_slave(  // CTRL
+		CTRL_SPI_CLK_DEV_PIN, CTRL_SPI_MOSI_DEV_PIN, CTRL_SPI_MISO_DEV_PIN,
+		SPI_ENDIANNESS_MSB | SPI_CPHA_FIRST_EDGE |
+		SPI_CPOL_LOW | SPI_MODE_DUPLEX | SPI_FRAME_MOTOROLA |
+		SPI_DATA_8, 0  // TODO: CRC?
+	);  // TODO: hardware NSS??
+	config_SPI_master(  // flash
+	 	FLASH_SPI_CLK_DEV_PIN, FLASH_SPI_MOSI_DEV_PIN, FLASH_SPI_MISO_DEV_PIN,
+		SPI_ENDIANNESS_MSB | SPI_CPHA_FIRST_EDGE |
+		SPI_CPOL_LOW | SPI_MODE_DUPLEX | SPI_FRAME_MOTOROLA |
+		SPI_DATA_8
+	);
 
-	/*!< test apps */
+	/*!< init AS5600 */
 	while (config_AS5600(
 		I2C2, AS5600_POW_NOM | AS5600_HYST_2LSB | AS5600_MODE_REDUCED_ANALOG |
 		AS5600_SFILTER_2 | AS5600_FFILTER_10LSB | AS5600_WDG_ON, 10
