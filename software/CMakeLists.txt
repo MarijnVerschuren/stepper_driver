@@ -58,6 +58,7 @@ link_directories(
 add_executable(${PROJECT_NAME}
         src/vector.S
         src/startup.S
+        src/syscalls.S
         src/sys.S
         src/NVIC.S
         src/GPIO.S
@@ -66,6 +67,7 @@ add_executable(${PROJECT_NAME}
         src/base.S
 
         src/main.c
+        src/base.c
         src/sys.c
         src/USART.c
         src/RTC.c

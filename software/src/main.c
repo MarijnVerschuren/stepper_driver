@@ -25,10 +25,11 @@
 #define TMC_NEN_PIN				3				/* GPIO		O	*/
 #define CTRL_SPI_NSS_PORT		GPIOA			/* CTRL SPI NSS */
 #define CTRL_SPI_NSS_PIN		4				/* GPIO		I	*/
-#define CTRL_SPI_NCS_DEV_PIN	SPI1_NSS_A4		/* SPI		I	*/
+#define CTRL_SPI_NSS_DEV_PIN	SPI1_NSS_A4		/* SPI		I	*/
 #define CTRL_SPI_CLK_DEV_PIN	SPI1_SCK_A5		/* SPI		I	*/
 #define CTRL_SPI_MISO_DEV_PIN	SPI1_MISO_A6	/* SPI		O	*/
 #define CTRL_SPI_MOSI_DEV_PIN	SPI1_MOSI_A7	/* SPI		I	*/
+#define CTRL_SPI				SPI1			/* SPI			*/
 #define STATUS_LED_PORT			GPIOA			/* status LED	*/
 #define STATUS_LED_PIN			8				/* GPIO		O	*/
 #define TMC_UART_TX_DEV_PIN		USART1_TX_A9	/* USART	O	*/
@@ -44,6 +45,7 @@
 #define FLASH_SPI_CLK_DEV_PIN	SPI3_SCK_B3		/* SPI		O	*/
 #define FLASH_SPI_MISO_DEV_PIN	SPI3_MISO_B4	/* SPI		I	*/
 #define FLASH_SPI_MOSI_DEV_PIN	SPI3_MOSI_B5	/* SPI		O	*/
+#define FLASH_SPI				SPI3			/* SPI			*/
 #define FLASH_NWP_PORT			GPIOB			/* flash NWP	*/
 #define FLASH_NWP_PIN			6				/* GPIO		O	*/
 #define FLASH_NRST_PORT			GPIOB			/* flash NWP	*/
@@ -95,7 +97,7 @@ void ADC_handler(void) {
 	}
 }
 
-void TIM1_update_handler(void) {
+void TIM1_UP_TIM10_handler(void) {
 	TIM1->SR &= ~0x00000001UL;
 	int16_t delta = target - angle;
 	int16_t delta1 = (target + 4096) - angle;
@@ -157,7 +159,7 @@ void main(void) {
 	// TIM
 	config_TIM_master(TIM1, 1000, 100, TIM_TRGO_UPDATE);										// 100 Hz
 	start_TIM_update_irq(TIM1);
-	config_TIM(TIM2, 50, 0xFFFFFFFF);															// 1MHz us delay timer
+	config_TIM(TIM2, 50, 0xFFFFFFFF);															// 1MHz us delay timer\
 	// TODO: is it possible to combine PWM and UPDATE triggers to make sure move and read are not done psudo-simultanuisly
 
 	// USART
@@ -167,12 +169,15 @@ void main(void) {
 	config_I2C(AS5600_I2C_SCL_DEV_PIN, AS5600_I2C_SDA_DEV_PIN, 0x00);							// AS5600_I2C
 
 	// SPI
-	fconfig_SPI_slave(  // CTRL
-		CTRL_SPI_CLK_DEV_PIN, CTRL_SPI_MOSI_DEV_PIN, CTRL_SPI_MISO_DEV_PIN,
-		SPI_ENDIANNESS_MSB | SPI_CPHA_FIRST_EDGE |
-		SPI_CPOL_LOW | SPI_MODE_DUPLEX | SPI_FRAME_MOTOROLA |
-		SPI_DATA_8, 0  // TODO: CRC?
-	);  // TODO: hardware NSS??
+	config_SPI_slave(  // ctrl
+			CTRL_SPI_NSS_DEV_PIN, CTRL_SPI_CLK_DEV_PIN, CTRL_SPI_MOSI_DEV_PIN, CTRL_SPI_MISO_DEV_PIN,
+			SPI_ENDIANNESS_MSB | SPI_CPHA_FIRST_EDGE |
+			SPI_CPOL_LOW | SPI_MODE_DUPLEX | SPI_FRAME_MOTOROLA |
+			SPI_FIFO_TH_HALF | SPI_DATA_8 | SPI_CLK_DIV_4
+	);
+	io_buffer_t* SPI_RX = init_io_buffer(64, 1, 0, 1);
+	start_SPI_read8_IRQ(SPI1, SPI_RX, 0);
+
 	config_SPI_master(  // flash
 	 	FLASH_SPI_CLK_DEV_PIN, FLASH_SPI_MOSI_DEV_PIN, FLASH_SPI_MISO_DEV_PIN,
 		SPI_ENDIANNESS_MSB | SPI_CPHA_FIRST_EDGE |
@@ -192,8 +197,12 @@ void main(void) {
 	start_TIM(TIM2);									// start delay timer
 	GPIO_write(TMC_NEN_PORT, TMC_NEN_PIN, 0);			// enable TMC chip
 
-	while (1) {
-		if (!delay) { __asm volatile ("wfe"); continue; }
+	while (1) { // __asm volatile ("wfi");
+		if (SPI_RX->i - SPI_RX->o > 2) {
+			target = *((uint16_t*)(SPI_RX->ptr + SPI_RX->o)) & 0xFFF;
+			SPI_RX->o += 2;
+		}
+		if (!delay) { continue; }
 		GPIO_toggle(TMC_STEP_PORT, TMC_STEP_PIN);
 		delay_TIM(TIM2, delay);
 	}
